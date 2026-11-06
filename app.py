@@ -13,27 +13,17 @@ def normalizar(s):
     s = re.sub(r'\s+',' ',s).strip()
     return s
 
-def buscar_columna(cols_norm, palabras):
-    for i, c in enumerate(cols_norm):
-        for p in palabras:
-            if p in c:
-                return i
-    return None
-
 def cargar_df(file):
-    # Intenta leer buscando la fila de encabezado real
     for h in [0,1,2,3]:
         try:
             df_tmp = pd.read_excel(file, header=h)
             cols = [normalizar(c) for c in df_tmp.columns.astype(str)]
-            # Si encuentra CODIGO y DISPONIBLE en esa fila, esa es la buena
-            if any("CODIGO" in c or "COD" in c for c in cols) and any("DISPONIBLE" in c or "DISP" in c for c in cols):
+            if "CODIGO" in cols and any("DISPONIBLE" in c for c in cols):
                 df_tmp.columns = cols
                 return df_tmp
         except:
             pass
-    # Si no encontró, lee con header 1 por defecto
-    df = pd.read_excel(file, header=1)
+    df = pd.read_excel(file, header=0)
     df.columns = [normalizar(c) for c in df.columns.astype(str)]
     return df
 
@@ -46,52 +36,50 @@ def cargar_base():
 
 st.subheader("SUBIR EXCEL DEL DÍA (solo admin)")
 uploaded = st.file_uploader("Upload", type=["xlsx","xls"], label_visibility="collapsed")
-
-if uploaded is not None:
-    df = cargar_df(uploaded)
-else:
-    df = cargar_base()
+df = cargar_df(uploaded) if uploaded is not None else cargar_base()
 
 if df is None:
     st.error("No se pudo cargar existencia.xlsx")
     st.stop()
 
-# Detectar columnas
 cols = list(df.columns)
-i_cod = buscar_columna(cols, ["CODIGO", "COD"])
-i_ean = buscar_columna(cols, ["EAN", "BARRA"])
-i_desc = buscar_columna(cols, ["DESCRIPCION", "DESCRIP", "PRODUCTO", "ARTICULO"])
-i_disp = buscar_columna(cols, ["DISPONIBLE", "DISP", "EXISTENCIA"])
-i_cajas = buscar_columna(cols, ["CAJA"])
-i_fam = buscar_columna(cols, ["FAMILIA", "CATEGORIA", "LINEA"])
+# MAPEO EXACTO SEGUN TU EXCEL - NO USAR COD PROVEE NI U CAJAS
+def col_exacta(nombre):
+    return nombre if nombre in cols else None
+def col_con(palabra, excluir=[]):
+    for c in cols:
+        if palabra in c and all(e not in c for e in excluir):
+            return c
+    return None
 
-# Si no encontró DISPONIBLE, muestra qué columnas sí encontró para arreglarlo
-if i_disp is None:
-    st.error("No encontré la columna DISPONIBLE. Estas son las columnas que tiene tu Excel:")
-    st.write(cols)
+col_cod = col_exacta("CODIGO")
+col_ean = col_exacta("EAN")
+col_desc = col_exacta("DESCRIPCION")
+col_fam = col_exacta("FAMILIA")
+# DISPONIBLE es la columna UNI DISPONIBLE al final
+col_disp = col_con("DISPONIBLE")
+# CAJAS es TOTAL CAJAS, no U CAJAS ni CAJAS suelta
+col_cajas = col_exacta("TOTAL CAJAS")
+col_total_unid = col_exacta("TOTAL UNIDADES")
+col_bloq = col_con("BLOQUEADAS")
+
+if col_disp is None or col_cod is None:
+    st.error(f"No encontré columnas. Columnas detectadas: {cols}")
     st.stop()
 
-col_cod = cols[i_cod] if i_cod is not None else cols[0]
-col_desc = cols[i_desc] if i_desc is not None else cols[1]
-col_disp = cols[i_disp]
-col_cajas = cols[i_cajas] if i_cajas is not None else None
-col_fam = cols[i_fam] if i_fam is not None else None
-col_ean = cols[i_ean] if i_ean is not None else None
-
-# Limpiar datos
-df = df.dropna(subset=[col_disp])
+df = df.dropna(subset=[col_desc])
 df[col_disp] = pd.to_numeric(df[col_disp], errors="coerce").fillna(0)
+if col_cajas:
+    df[col_cajas] = pd.to_numeric(df[col_cajas], errors="coerce").fillna(0)
 
 # Buscador
 st.subheader("🔍 Buscar por CODIGO / EAN / DESCRIPCION")
 busqueda = st.text_input("", placeholder="Ej: 388151, 75010..., CORN FLAKES...", label_visibility="collapsed")
 
-# Filtros
 fam_opciones = ["Todas"]
 if col_fam:
     fam_opciones += sorted(df[col_fam].dropna().astype(str).unique().tolist())
 familia = st.selectbox("FAMILIA", fam_opciones)
-
 solo_criticos = st.checkbox("Solo ver CRITICOS y AGOTADOS")
 solo_bloq = st.checkbox("Solo ver BLOQUEADOS")
 
@@ -99,35 +87,32 @@ df_f = df.copy()
 if busqueda:
     b = busqueda.upper().strip()
     mask = df_f[col_desc].astype(str).str.upper().str.contains(b, na=False)
-    if col_cod:
-        mask = mask | df_f[col_cod].astype(str).str.contains(b, na=False)
+    mask = mask | df_f[col_cod].astype(str).str.contains(b, na=False)
     if col_ean:
         mask = mask | df_f[col_ean].astype(str).str.contains(b, na=False)
     df_f = df_f[mask]
-
 if familia != "Todas" and col_fam:
     df_f = df_f[df_f[col_fam].astype(str) == familia]
-
 if solo_criticos:
     df_f = df_f[df_f[col_disp] <= 50]
+if solo_bloq and col_bloq:
+    df_f = df_f[pd.to_numeric(df_f[col_bloq], errors="coerce").fillna(0) > 0]
 
-# Métricas
 c1, c2, c3 = st.columns(3)
 c1.metric("UNID. DISPONIBLE", f"{int(df_f[col_disp].sum()):,}")
 if col_cajas:
-    df_f[col_cajas] = pd.to_numeric(df_f[col_cajas], errors="coerce").fillna(0)
-    c2.metric("CAJAS", f"{int(df_f[col_cajas].sum()):,}")
+    c2.metric("TOTAL CAJAS", f"{int(df_f[col_cajas].sum()):,}")
 else:
     c2.metric("PRODUCTOS", f"{len(df_f):,}")
 c3.metric("AGOTADOS", f"{int((df_f[col_disp]==0).sum()):,}")
 
-# Tabla
 mostrar = pd.DataFrame()
-mostrar["CODIGO"] = df_f[col_cod] if col_cod in df_f else ""
+mostrar["CODIGO"] = df_f[col_cod]
+mostrar["EAN"] = df_f[col_ean] if col_ean else ""
 mostrar["DESCRIPCION"] = df_f[col_desc]
 mostrar["DISPONIBLE"] = df_f[col_disp].astype(int)
 if col_cajas:
-    mostrar["CAJAS"] = df_f[col_cajas].astype(int)
+    mostrar["TOTAL CAJAS"] = df_f[col_cajas].astype(int)
 if col_fam:
     mostrar["FAMILIA"] = df_f[col_fam]
 
