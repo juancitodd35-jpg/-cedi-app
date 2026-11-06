@@ -56,8 +56,14 @@ col_cod = col_exacta("CODIGO")
 col_ean = col_exacta("EAN")
 col_desc = col_exacta("DESCRIPCION")
 col_fam = col_exacta("FAMILIA")
-# DISPONIBLE es la columna UNI DISPONIBLE al final
-col_disp = col_con("DISPONIBLE")
+# DISPONIBLE es UNI DISPONIBLE, NUNCA NO DISPONIBLE
+col_disp = col_exacta("UNI DISPONIBLE")
+if col_disp is None:
+    col_disp = col_exacta("UNID DISPONIBLE")
+if col_disp is None:
+    col_disp = col_exacta("UNIDADES DISPONIBLE")
+if col_disp is None:
+    col_disp = col_con("DISPONIBLE", excluir=["NO"])
 # CAJAS es TOTAL CAJAS, no U CAJAS ni CAJAS suelta
 col_cajas = col_exacta("TOTAL CAJAS")
 col_total_unid = col_exacta("TOTAL UNIDADES")
