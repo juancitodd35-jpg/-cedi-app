@@ -1,106 +1,135 @@
 import streamlit as st
 import pandas as pd
+import re
 
-st.set_page_config(page_title="CEDI - Existencia", layout="wide", page_icon="📦")
-
-st.markdown("""
-<style>
-.main { background-color: #F2F4F7; }
-div[data-testid="stMetric"] { background: white; border-radius: 12px; padding: 12px; border: 1px solid #D0D7E3; }
-</style>
-""", unsafe_allow_html=True)
-
+st.set_page_config(page_title="CEDI - EXISTENCIA", layout="wide")
 st.title("📦 CEDI • EXISTENCIA")
 st.caption("KELLOGG EL SALVADOR - Actualiza subiendo el Excel del día")
 
-uploaded = st.file_uploader("SUBIR EXCEL DEL DÍA (solo admin)", type=["xlsx","xls"])
+def normalizar(s):
+    s = str(s).upper().strip()
+    s = s.replace("Á","A").replace("É","E").replace("Í","I").replace("Ó","O").replace("Ú","U")
+    s = re.sub(r'[^A-Z0-9 ]',' ',s)
+    s = re.sub(r'\s+',' ',s).strip()
+    return s
 
-# Si no suben nada, usa el archivo que está en el repo
-@st.cache_data
-def load_data(file):
-    df = pd.read_excel(file, header=0)
-    # Limpia nombres de columnas
-    df.columns = [str(c).strip().upper() for c in df.columns]
-    return df
-
-if uploaded is not None:
-    df = load_data(uploaded)
-else:
-    try:
-        df = load_data("existencia.xlsx")
-    except:
-        st.warning("Sube el Excel del CEDI para empezar. Usa el botón de arriba.")
-        st.stop()
-
-# Renombrar para que funcione aunque vengan con espacios
-# Columnas reales tuyas: COD PROVEE, PROVEEDOR, FAMILIA, CODIGO, EAN, U CAJAS, U PACKS, PACKS CAJA, UNIDADES PALLET, DESCRIPCION, CAJAS, UNIDADES, FACTOR DESPACHO, U. SUELTAS, U. BLOQUEADAS, C. BLOQUEADAS, TOTAL CAJAS, TOTAL UNIDADES, EN PREPARACION, NO DISPONIBLE, UNID. DISPONIBLE
-# Buscamos las columnas por nombre parcial
-def find_col(contains):
-    for c in df.columns:
-        if contains in c:
-            return c
+def buscar_columna(cols_norm, palabras):
+    for i, c in enumerate(cols_norm):
+        for p in palabras:
+            if p in c:
+                return i
     return None
 
-col_codigo = find_col("CODIGO")
-col_ean = find_col("EAN")
-col_desc = find_col("DESCRIPCION")
-col_fam = find_col("FAMILIA")
-col_disp = find_col("DISPONIBLE")  # UNID. DISPONIBLE
-col_total = find_col("TOTAL UNIDADES")
-col_cajas = find_col("TOTAL CAJAS")
-col_nodisp = find_col("NO DISPONIBLE")
-col_prep = find_col("PREPARACION")
-col_bloq = find_col("U. BLOQUEADAS")
+def cargar_df(file):
+    # Intenta leer buscando la fila de encabezado real
+    for h in [0,1,2,3]:
+        try:
+            df_tmp = pd.read_excel(file, header=h)
+            cols = [normalizar(c) for c in df_tmp.columns.astype(str)]
+            # Si encuentra CODIGO y DISPONIBLE en esa fila, esa es la buena
+            if any("CODIGO" in c or "COD" in c for c in cols) and any("DISPONIBLE" in c or "DISP" in c for c in cols):
+                df_tmp.columns = cols
+                return df_tmp
+        except:
+            pass
+    # Si no encontró, lee con header 1 por defecto
+    df = pd.read_excel(file, header=1)
+    df.columns = [normalizar(c) for c in df.columns.astype(str)]
+    return df
 
-# Convertir a número
-for c in [col_disp, col_total, col_cajas, col_nodisp, col_prep, col_bloq]:
-    if c:
-        df[c] = pd.to_numeric(df[c], errors='coerce').fillna(0)
+@st.cache_data
+def cargar_base():
+    try:
+        return cargar_df("existencia.xlsx")
+    except:
+        return None
+
+st.subheader("SUBIR EXCEL DEL DÍA (solo admin)")
+uploaded = st.file_uploader("Upload", type=["xlsx","xls"], label_visibility="collapsed")
+
+if uploaded is not None:
+    df = cargar_df(uploaded)
+else:
+    df = cargar_base()
+
+if df is None:
+    st.error("No se pudo cargar existencia.xlsx")
+    st.stop()
+
+# Detectar columnas
+cols = list(df.columns)
+i_cod = buscar_columna(cols, ["CODIGO", "COD"])
+i_ean = buscar_columna(cols, ["EAN", "BARRA"])
+i_desc = buscar_columna(cols, ["DESCRIPCION", "DESCRIP", "PRODUCTO", "ARTICULO"])
+i_disp = buscar_columna(cols, ["DISPONIBLE", "DISP", "EXISTENCIA"])
+i_cajas = buscar_columna(cols, ["CAJA"])
+i_fam = buscar_columna(cols, ["FAMILIA", "CATEGORIA", "LINEA"])
+
+# Si no encontró DISPONIBLE, muestra qué columnas sí encontró para arreglarlo
+if i_disp is None:
+    st.error("No encontré la columna DISPONIBLE. Estas son las columnas que tiene tu Excel:")
+    st.write(cols)
+    st.stop()
+
+col_cod = cols[i_cod] if i_cod is not None else cols[0]
+col_desc = cols[i_desc] if i_desc is not None else cols[1]
+col_disp = cols[i_disp]
+col_cajas = cols[i_cajas] if i_cajas is not None else None
+col_fam = cols[i_fam] if i_fam is not None else None
+col_ean = cols[i_ean] if i_ean is not None else None
+
+# Limpiar datos
+df = df.dropna(subset=[col_disp])
+df[col_disp] = pd.to_numeric(df[col_disp], errors="coerce").fillna(0)
+
+# Buscador
+st.subheader("🔍 Buscar por CODIGO / EAN / DESCRIPCION")
+busqueda = st.text_input("", placeholder="Ej: 388151, 75010..., CORN FLAKES...", label_visibility="collapsed")
 
 # Filtros
-busqueda = st.text_input("🔍 Buscar por CODIGO / EAN / DESCRIPCION", placeholder="Ej: 388151, 75010..., CORN FLAKES...")
-familias = ["Todas"] + sorted(df[col_fam].dropna().unique().tolist()) if col_fam else ["Todas"]
-fam_sel = st.selectbox("FAMILIA", familias)
+fam_opciones = ["Todas"]
+if col_fam:
+    fam_opciones += sorted(df[col_fam].dropna().astype(str).unique().tolist())
+familia = st.selectbox("FAMILIA", fam_opciones)
+
 solo_criticos = st.checkbox("Solo ver CRITICOS y AGOTADOS")
-solo_bloqueados = st.checkbox("Solo ver BLOQUEADOS")
+solo_bloq = st.checkbox("Solo ver BLOQUEADOS")
 
 df_f = df.copy()
 if busqueda:
-    b = busqueda.strip().lower()
-    df_f = df_f[df_f.apply(lambda r: b in str(r[col_codigo]).lower() or b in str(r[col_ean]).lower() or b in str(r[col_desc]).lower(), axis=1)]
-if fam_sel != "Todas":
-    df_f = df_f[df_f[col_fam] == fam_sel]
+    b = busqueda.upper().strip()
+    mask = df_f[col_desc].astype(str).str.upper().str.contains(b, na=False)
+    if col_cod:
+        mask = mask | df_f[col_cod].astype(str).str.contains(b, na=False)
+    if col_ean:
+        mask = mask | df_f[col_ean].astype(str).str.contains(b, na=False)
+    df_f = df_f[mask]
+
+if familia != "Todas" and col_fam:
+    df_f = df_f[df_f[col_fam].astype(str) == familia]
+
 if solo_criticos:
-    df_f = df_f[df_f[col_disp] <= 300]
-if solo_bloqueados:
-    df_f = df_f[df_f[col_nodisp] > 0]
+    df_f = df_f[df_f[col_disp] <= 50]
 
-# KPIs
-c1, c2, c3, c4 = st.columns(4)
+# Métricas
+c1, c2, c3 = st.columns(3)
 c1.metric("UNID. DISPONIBLE", f"{int(df_f[col_disp].sum()):,}")
-c2.metric("TOTAL CAJAS", f"{int(df_f[col_cajas].sum()):,}")
-c3.metric("NO DISPONIBLE", f"{int(df_f[col_nodisp].sum()):,}")
-c4.metric("AGOTADOS", f"{int((df_f[col_disp]==0).sum())}")
+if col_cajas:
+    df_f[col_cajas] = pd.to_numeric(df_f[col_cajas], errors="coerce").fillna(0)
+    c2.metric("CAJAS", f"{int(df_f[col_cajas].sum()):,}")
+else:
+    c2.metric("PRODUCTOS", f"{len(df_f):,}")
+c3.metric("AGOTADOS", f"{int((df_f[col_disp]==0).sum()):,}")
 
-# Estado
-def estado(row):
-    if row[col_disp] == 0:
-        return "🔴 AGOTADO"
-    if row[col_nodisp] > 0 or row[col_bloq] > 0:
-        return "🟠 BLOQUEADO PARCIAL"
-    if row[col_disp] <= 300:
-        return "🟡 CRITICO"
-    return "🟢 OK"
+# Tabla
+mostrar = pd.DataFrame()
+mostrar["CODIGO"] = df_f[col_cod] if col_cod in df_f else ""
+mostrar["DESCRIPCION"] = df_f[col_desc]
+mostrar["DISPONIBLE"] = df_f[col_disp].astype(int)
+if col_cajas:
+    mostrar["CAJAS"] = df_f[col_cajas].astype(int)
+if col_fam:
+    mostrar["FAMILIA"] = df_f[col_fam]
 
-df_f["ESTADO"] = df_f.apply(estado, axis=1)
-
-# Mostrar tabla
-cols_mostrar = [col_codigo, col_ean, col_desc, col_fam, col_cajas, col_total, col_nodisp, col_prep, col_disp, "ESTADO"]
-cols_mostrar = [c for c in cols_mostrar if c in df_f.columns]
-st.dataframe(
-    df_f[cols_mostrar].sort_values(by=col_disp),
-    use_container_width=True,
-    hide_index=True
-)
-
-st.caption(f"Mostrando {len(df_f)} de {len(df)} SKUs • Fuente: existencia.xlsx • La cifra válida para vender es UNID. DISPONIBLE")
+st.dataframe(mostrar, use_container_width=True, hide_index=True)
+st.caption(f"Mostrando {len(mostrar)} productos")
