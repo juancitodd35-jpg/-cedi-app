@@ -28,8 +28,16 @@ st.divider()
 @st.cache_data(ttl=60)
 def cargar_datos():
     try:
-        df = pd.read_excel("inventario.xlsx")
-        df.columns = [c.strip().upper() for c in df.columns]
+        # header=1 le dice: saltate la primera fila de título, los encabezados están en la fila 2
+        df = pd.read_excel("inventario.xlsx", header=1)
+        df.columns = [str(c).strip().upper() for c in df.columns]
+        # Borramos columnas vacías tipo UNNAMED
+        df = df.loc[:, ~df.columns.str.contains('UNNAMED')]
+        # Borramos filas totalmente vacías
+        df = df.dropna(how='all')
+        # Borramos filas donde no hay CODIGO
+        if 'CODIGO' in df.columns:
+            df = df[df['CODIGO'].notna()]
         return df
     except Exception as e:
         return pd.DataFrame()
