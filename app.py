@@ -103,13 +103,10 @@ with c1:
     st.markdown(f"<h1 style='margin-top:-15px'>{val:,}</h1>", unsafe_allow_html=True)
 with c2:
     st.write("TOTAL CAJAS")
-    val2 = int(df_f[col_cajas].sum()) if col_cajas else 0
-    st.markdown(f"<h1 style='margin-top:-15px'>{val2:,}</h1>", unsafe_allow_html=True)
+    val2 = int(df[col_cajas].sum()) if col_cajas else 0
 with c3:
     st.write("AGOTADOS")
-    agot = int((df_f[col_unidades]==0).sum()) if col_unidades else 0
-    st.markdown(f"<h1 style='margin-top:-15px'>{agot}</h1>", unsafe_allow_html=True)
-
+    agot = int((df[col_unidades]==0).sum()) if col_unidades else 0
 st.divider()
 st.write(f"**{len(df_f)} productos encontrados**")
 
