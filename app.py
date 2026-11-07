@@ -3,8 +3,11 @@ import pandas as pd
 import re
 
 st.set_page_config(page_title="CEDI - EXISTENCIA", layout="wide")
-st.image("logo.png", width=160)    
-st.title("📦 CEDI • EXISTENCIA")
+col_logo, col_titulo = st.columns([1, 6])
+with col_logo:
+    st.image("logo.png", width=65)
+with col_titulo:
+    st.title("CEDI • EXISTENCIA")
 st.caption("KELLOGG EL SALVADOR - Actualiza subiendo el Excel del día")
 
 def normalizar(s):
