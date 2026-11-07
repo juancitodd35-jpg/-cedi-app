@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 import re
 
-st.set_page_config(page_title="CEDI - EXISTENCIA", layout="wide")
+st.set_page_config(page_title="RANSA - EXISTENCIA", layout="wide")
 col_logo, col_titulo = st.columns([1, 6])
 with col_logo:
     st.image("logo.png", width=65)
