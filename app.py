@@ -3,6 +3,11 @@ import pandas as pd
 import os
 
 st.set_page_config(page_title="RANSA - EXISTENCIA", layout="wide")
+
+# --- LOGO ---
+if os.path.exists("logo.png"):
+    st.image("logo.png", width=180)
+
 st.title("RANSA • EXISTENCIA")
 st.divider()
 
@@ -40,8 +45,9 @@ for c in [col_cajas, col_disp, col_bloq_u, col_bloq_c]:
 
 df = df[df[col_codigo].notna()]
 
-# --- CODIGO DE PROVEEDOR PEQUEÑITO, TAMAÑO 8, SOLO NUMERO ---
-st.markdown("<p style='font-size:8px; margin-bottom:2px; color:gray;'>CODIGO DE PROVEEDOR</p>", unsafe_allow_html=True)
+# --- CODIGO DE PROVEEDOR FIJO, NO CAMBIA NUNCA ---
+st.markdown("<p style='font-size:8px; margin-bottom:0px; color:gray;'>CODIGO DE PROVEEDOR</p>", unsafe_allow_html=True)
+st.markdown("<p style='font-size:14px; margin-top:0px; font-weight:bold;'>004694</p>", unsafe_allow_html=True)
 
 # --- BUSCADOR POR NOMBRE O POR CODIGO ---
 busqueda = st.text_input("🔍 Buscar por nombre o por código", placeholder="Ej: 388151, CORN FLAKES, KELLOGS...")
