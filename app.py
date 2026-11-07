@@ -43,6 +43,7 @@ def buscar(palabras):
 # Mapeo a lo que vos querés ver
 col_codigo = buscar(['CODIGO'])
 col_ean = buscar(['EAN'])
+col_desc = buscar(['DESCRIPCION', 'DESCRIP'])
 col_ucajas = buscar(['U CAJAS', 'UCAJAS'])
 col_cajas = buscar(['TOTAL CAJAS', 'CAJAS'])
 # Si U CAJAS y CAJAS son la misma, buscamos la otra
