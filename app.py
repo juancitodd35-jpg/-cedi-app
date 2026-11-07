@@ -109,13 +109,14 @@ st.divider()
 st.write(f"**{len(df_f)} productos encontrados**")
 
 # --- TABLA EXACTA QUE PEDISTE ---
-# CODIGO, EAN, UCAJAS, CAJAS, UNIDADES, PREPARACIÓN
-orden = [col_codigo, col_ean, col_ucajas, col_cajas, col_unidades, col_prep]
+# CODIGO, EAN, DESCRIPCION, CAJAS, UNIDADES, PREPARACIÓN
+orden = [col_codigo, col_ean, col_desc, col_cajas, col_unidades, col_prep]
+
 # Renombrar para que se vea bonito
 nombres_bonitos = {}
 if col_codigo: nombres_bonitos[col_codigo] = "CODIGO"
 if col_ean: nombres_bonitos[col_ean] = "EAN"
-if col_ucajas: nombres_bonitos[col_ucajas] = "UCAJAS"
+if col_desc: nombres_bonitos[col_desc] = "DESCRIPCION"
 if col_cajas: nombres_bonitos[col_cajas] = "CAJAS"
 if col_unidades: nombres_bonitos[col_unidades] = "UNIDADES"
 if col_prep: nombres_bonitos[col_prep] = "PREPARACIÓN"
