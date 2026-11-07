@@ -71,6 +71,7 @@ busqueda = st.text_input("🔍 Buscar por CODIGO / EAN / DESCRIPCION", placehold
 if busqueda:
     texto = str(busqueda).lower().strip()
     df_f = df[df.astype(str).apply(lambda row: row.str.lower().str.contains(texto, na=False).any(), axis=1)]
+    col_desc = buscar(['DESCRIPCION', 'DESCRIP'])
 else:
     df_f = df.copy()
 
