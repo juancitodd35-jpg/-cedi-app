@@ -64,6 +64,12 @@ else:
     df_filtrado = df
 
 st.write(f"**{len(df_filtrado)} productos encontrados**")
-st.dataframe(df_filtrado, use_container_width=True, hide_index=True)
+# Solo mostramos las columnas que sirven para los mercaderistas
+columnas_buenas = [c for c in ['CODIGO','EAN','FAMILIA','PROVEEDOR','DESCRIPCION','EXISTENCIA','STOCK','U CAJAS','U PACKS'] if c in df_filtrado.columns]
+# Si no encuentra ninguna, muestra todo lo que haya
+if not columnas_buenas:
+    columnas_buenas = df_filtrado.columns.tolist()
+
+st.dataframe(df_filtrado[columnas_buenas], use_container_width=True, hide_index=True)
 
 st.caption("App RANSA - Existencia en vivo")
