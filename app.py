@@ -3,6 +3,7 @@ import pandas as pd
 import re
 
 st.set_page_config(page_title="CEDI - EXISTENCIA", layout="wide")
+st.image("logo.png", width=160)    
 st.title("📦 CEDI • EXISTENCIA")
 st.caption("KELLOGG EL SALVADOR - Actualiza subiendo el Excel del día")
 
