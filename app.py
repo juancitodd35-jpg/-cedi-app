@@ -53,7 +53,9 @@ if col_ucajas == col_cajas:
         if 'CAJAS' in c and c != col_ucajas:
             col_cajas = c
             break
-col_unidades = buscar(['UNIDADES', 'DISPONIBLE', 'UNID'])
+col_unidades = buscar(['DISPONIBLE', 'UNID. DISPONIBLE'])
+if not col_unidades:
+    col_unidades = buscar(['UNIDADES'])
 col_prep = buscar(['PREPARACION', 'PREPARA'])
 col_fam = buscar(['FAMILIA'])
 col_bloq = buscar(['BLOQUEADO', 'BLOQ'])
@@ -95,8 +97,9 @@ if solo_bloq and col_bloq:
 # --- NUMEROTES ---
 c1, c2, c3 = st.columns(3)
 with c1:
+   with c1:
     st.write("UNID. DISPONIBLE")
-    val = int(df_f[col_unidades].sum()) if col_unidades else 0
+    val = int(df[col_unidades].sum()) if col_unidades else 0
     st.markdown(f"<h1 style='margin-top:-15px'>{val:,}</h1>", unsafe_allow_html=True)
 with c2:
     st.write("TOTAL CAJAS")
