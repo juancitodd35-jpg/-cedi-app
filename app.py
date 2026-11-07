@@ -7,7 +7,7 @@ col_logo, col_titulo = st.columns([1, 6])
 with col_logo:
     st.image("logo.png", width=65)
 with col_titulo:
-    st.title("CEDI • EXISTENCIA")
+    st.title("RANSA • EXISTENCIA")
 st.caption("KELLOGG EL SALVADOR - Actualiza subiendo el Excel del día")
 
 def normalizar(s):
