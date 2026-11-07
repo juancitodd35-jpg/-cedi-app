@@ -51,15 +51,8 @@ for c in [col_cajas, col_disp, col_bloq_u, col_bloq_c]:
 # Quitar filas sin código
 df = df[df[col_codigo].notna()]
 
-# --- 3. ARRIBA: SOLO CODIGO CON DESCRIPCION ---
-st.write("### Código de Proveedor")
-# Lista: CODIGO - DESCRIPCION
-df['CODIGO_DESC'] = df[col_codigo].astype(str) + " - " + df[col_desc].astype(str)
-opcion = st.selectbox("Seleccionar código", ["Todos"] + sorted(df['CODIGO_DESC'].unique().tolist()))
-if opcion != "Todos":
-    codigo_sel = opcion.split(" - ")[0]
-    df = df[df[col_codigo].astype(str) == codigo_sel]
-
+# --- 3. ARRIBA: SOLO CODIGO DE PROVEEDOR, PEQUEÑITO TAMAÑO 8 ---
+st.markdown("<p style='font-size:8px; margin-bottom:2px; color:gray;'>CODIGO DE PROVEEDOR</p>", unsafe_allow_html=True)
 # --- 4. BUSCADOR POR NOMBRE O POR CODIGO ---
 busqueda = st.text_input("🔍 Buscar por nombre o por código", placeholder="Ej: 388151, CORN FLAKES, KELLOGS...")
 if busqueda:
