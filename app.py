@@ -12,11 +12,10 @@ st.title("RANSA • EXISTENCIA")
 tab1, tab2 = st.tabs(["📦 INVENTARIO RANSA", "🏪 EXISTENCIAS EN TIENDAS"])
 
 # ======================================================
-# PESTAÑA 1 - NO SE TOCA, SOLO QUE YA CARGA SOLA SI EL ARCHIVO ESTA EN GITHUB
+# PESTAÑA 1 - NO SE TOCA
 # ======================================================
 with tab1:
     st.divider()
-    # Si ya subiste inventario.xlsx a GitHub, carga solo. Si no, te deja subirlo
     archivo_subido = st.file_uploader("📂 Cargar archivo inventario.xlsx", type=["xlsx", "xls"], key="inv")
 
     @st.cache_data(ttl=60)
@@ -95,55 +94,67 @@ with tab1:
         st.dataframe(df_mostrar, use_container_width=True, hide_index=True)
 
 # ======================================================
-# PESTAÑA 2 - ARREGLADA
-# - Ya carga sola si existencias_tiendas.xlsx está en GitHub
-# - Buscador busca por ALMACEN aunque el almacén sea el nombre de la hoja del Excel
-# - Tabla: ARTICULO, BARRA, DESCRIPCION, EXISTENCIA, PRECIO (sin proveedor)
+# PESTAÑA 2 - CON LISTA DESPLEGABLE DE TIENDAS
+# Ya no es buscador con texto. Es lista: CODIGO - NOMBRE
+# Y ya carga sola si el archivo está en GitHub
 # ======================================================
 with tab2:
     st.divider()
+    st.write("🏪 **Selecciona tu tienda**")
 
-    # Si el archivo ya está en GitHub, no pide Upload. Si no, te deja subirlo
-    archivo2 = st.file_uploader("📂 Cargar archivo existencias en las tiendas", type=["xlsx", "xls", "csv"], key="tiendas")
+    # --- Cargar mapa CODIGO -> NOMBRE desde almacenes.csv en GitHub ---
+    mapa_nombres = {}
+    if os.path.exists("almacenes.csv"):
+        try:
+            df_map = pd.read_csv("almacenes.csv")
+            df_map.columns = [str(c).strip().upper() for c in df_map.columns]
+            # Busca columnas CODIGO y NOMBRE
+            col_cod = [c for c in df_map.columns if 'COD' in c][0]
+            col_nom = [c for c in df_map.columns if 'NOM' in c or 'ALMAC' in c or 'TIENDA' in c or 'SUCURSAL' in c][0]
+            for _, r in df_map.iterrows():
+                mapa_nombres[str(r[col_cod]).strip()] = str(r[col_nom]).strip()
+        except:
+            pass
 
+    # --- Cargar existencias ---
+    # 1. Prioridad: archivo en GitHub (para que lo vean todos en el teléfono)
+    # 2. Si no está en GitHub, dejar subir con botón (solo lo ve quien lo sube)
     df2_total = pd.DataFrame()
-    hojas_encontradas = []
 
-    # 1. Intentar cargar desde GitHub primero
     if os.path.exists("existencias_tiendas.xlsx"):
         try:
             xl = pd.ExcelFile("existencias_tiendas.xlsx")
-            hojas_encontradas = xl.sheet_names
-            lista_dfs = []
-            for hoja in hojas_encontradas:
+            lista = []
+            for hoja in xl.sheet_names:
                 d = pd.read_excel("existencias_tiendas.xlsx", sheet_name=hoja, header=0)
                 if sum(['unnamed' in str(c).lower() for c in d.columns]) > 3:
                     d = pd.read_excel("existencias_tiendas.xlsx", sheet_name=hoja, header=1)
-                d['ALMACEN_DE_HOJA'] = hoja  # El nombre de la hoja es el almacén
-                lista_dfs.append(d)
-            df2_total = pd.concat(lista_dfs, ignore_index=True)
+                d['ALMACEN_DE_HOJA'] = hoja
+                lista.append(d)
+            df2_total = pd.concat(lista, ignore_index=True)
+            st.success("✅ Archivo cargado desde GitHub - ya lo pueden ver todos en el teléfono")
         except Exception as e:
-            st.error(f"No pude leer existencias_tiendas.xlsx de GitHub: {e}")
-
-    # 2. Si subiste con el botón, ese tiene prioridad
-    elif archivo2 is not None:
-        try:
-            if archivo2.name.endswith(".csv"):
-                df2_total = pd.read_csv(archivo2)
-                df2_total['ALMACEN_DE_HOJA'] = "ARCHIVO CSV"
-            else:
-                xl = pd.ExcelFile(archivo2)
-                hojas_encontradas = xl.sheet_names
-                lista_dfs = []
-                for hoja in hojas_encontradas:
-                    d = pd.read_excel(archivo2, sheet_name=hoja, header=0)
-                    if sum(['unnamed' in str(c).lower() for c in d.columns]) > 3:
-                        d = pd.read_excel(archivo2, sheet_name=hoja, header=1)
-                    d['ALMACEN_DE_HOJA'] = hoja
-                    lista_dfs.append(d)
-                df2_total = pd.concat(lista_dfs, ignore_index=True)
-        except Exception as e:
-            st.error(f"No pude leer el archivo: {e}")
+            st.error(f"No pude leer existencias_tiendas.xlsx: {e}")
+    else:
+        st.warning("⚠️ Todavía no está existencias_tiendas.xlsx en GitHub. Subilo a GitHub para que lo vean los mercaderistas. Mientras tanto podés subirlo aquí, pero solo lo vas a ver vos.")
+        archivo2 = st.file_uploader("📂 Cargar archivo existencias en las tiendas (solo para vos)", type=["xlsx", "xls", "csv"], key="tiendas")
+        if archivo2 is not None:
+            try:
+                if archivo2.name.endswith(".csv"):
+                    df2_total = pd.read_csv(archivo2)
+                    df2_total['ALMACEN_DE_HOJA'] = "CSV"
+                else:
+                    xl = pd.ExcelFile(archivo2)
+                    lista = []
+                    for hoja in xl.sheet_names:
+                        d = pd.read_excel(archivo2, sheet_name=hoja, header=0)
+                        if sum(['unnamed' in str(c).lower() for c in d.columns]) > 3:
+                            d = pd.read_excel(archivo2, sheet_name=hoja, header=1)
+                        d['ALMACEN_DE_HOJA'] = hoja
+                        lista.append(d)
+                    df2_total = pd.concat(lista, ignore_index=True)
+            except Exception as e:
+                st.error(f"No pude leer el archivo: {e}")
 
     if not df2_total.empty:
         df2_total.columns = [str(c).strip().upper() for c in df2_total.columns]
@@ -162,7 +173,6 @@ with tab2:
         col_existencia = buscar_col(['existencia'])
         col_precio = buscar_col(['precio'])
 
-        # DESCRIPCION = 2do NOMBRE (1er NOMBRE es KELLOGG, proveedor, lo ignoramos)
         idx_nombre = [i for i, c in enumerate(cols) if c == 'NOMBRE']
         if len(idx_nombre) >= 2:
             col_descripcion = cols[idx_nombre[1]]
@@ -171,13 +181,11 @@ with tab2:
         else:
             col_descripcion = buscar_col(['descripcion', 'desc', 'producto'])
 
-        # ALMACEN: primero buscar columna que diga ALMACEN / SUCURSAL / TIENDA
-        col_almacen_columna = buscar_col(['almacen', 'almacén', 'sucursal', 'tienda', 'local', 'bodega'])
-        # Si no hay columna, usamos el nombre de la hoja
-        if col_almacen_columna is not None:
-            df2_total['ALMACEN_FINAL'] = df2_total[col_almacen_columna].astype(str)
+        col_almacen_col = buscar_col(['almacen', 'almacén', 'sucursal', 'tienda', 'local', 'bodega'])
+        if col_almacen_col is not None:
+            df2_total['ALMACEN_FINAL'] = df2_total[col_almacen_col].astype(str).str.strip()
         else:
-            df2_total['ALMACEN_FINAL'] = df2_total['ALMACEN_DE_HOJA'].astype(str)
+            df2_total['ALMACEN_FINAL'] = df2_total['ALMACEN_DE_HOJA'].astype(str).str.strip()
 
         df_limpio = pd.DataFrame()
         df_limpio['ARTICULO'] = df2_total[col_articulo]
@@ -188,40 +196,36 @@ with tab2:
         df_limpio['ALMACEN'] = df2_total['ALMACEN_FINAL']
         df_limpio = df_limpio[df_limpio['ARTICULO'].notna()]
 
-        # Mostrar qué almacenes encontró, para que verifiques
-        almacenes = sorted(df_limpio['ALMACEN'].astype(str).unique().tolist())
-        st.caption(f"Almacenes que encontré: {', '.join(almacenes)}")
+        # --- LISTA DESPLEGABLE: CODIGO - NOMBRE ---
+        # Sacar lista única de almacenes
+        codigos = sorted(df_limpio['ALMACEN'].unique().tolist(), key=lambda x: str(x))
 
-        # --- BUSCADOR POR CODIGO O NOMBRE DE ALMACEN ---
-        bus = st.text_input("🔍 Buscar almacén por código o nombre", placeholder="Ej: GIGANTE, WALMART...", key="bus_almacen")
-        if bus:
-            t = str(bus).lower().strip()
-            # Busca en ALMACEN, y también en DESCRIPCION por si escribís un producto
-            df_f = df_limpio[
-                df_limpio['ALMACEN'].astype(str).str.lower().str.contains(t, na=False) |
-                df_limpio['DESCRIPCION'].astype(str).str.lower().str.contains(t, na=False) |
-                df_limpio['ARTICULO'].astype(str).str.lower().str.contains(t, na=False) |
-                df_limpio['BARRA'].astype(str).str.lower().str.contains(t, na=False)
-            ]
-        else:
+        def etiqueta(codigo):
+            codigo_str = str(codigo).strip()
+            # Si hay nombre en almacenes.csv, mostrar CODIGO - NOMBRE
+            if codigo_str in mapa_nombres:
+                return f"{codigo_str} - {mapa_nombres[codigo_str]}"
+            # Si el código ya trae nombre, mostrarlo tal cual
+            return codigo_str
+
+        # Opción para ver todas
+        opciones = ["— TODAS LAS TIENDAS —"] + codigos
+
+        seleccion = st.selectbox(
+            "🏪 Selecciona tu tienda",
+            opciones,
+            format_func=lambda x: "— TODAS LAS TIENDAS —" if x == "— TODAS LAS TIENDAS —" else etiqueta(x),
+            key="select_tienda"
+        )
+
+        if seleccion == "— TODAS LAS TIENDAS —":
             df_f = df_limpio.copy()
-
-        # --- TARJETA TOTAL EXISTENCIAS ---
-        if bus and len(df_f) > 0:
-            # Si el buscador encontró 1 solo almacén, mostrar ese nombre
-            almacenes_f = df_f['ALMACEN'].unique()
-            if len(almacenes_f) == 1:
-                titulo = f"TOTAL EXISTENCIAS - {almacenes_f[0]}"
-            else:
-                titulo = f"TOTAL EXISTENCIAS - BUSQUEDA: {bus}"
-            total = df_f['EXISTENCIA'].sum()
-        elif bus and len(df_f) == 0:
-            titulo = f"SIN RESULTADOS PARA: {bus}"
-            total = 0
-        else:
             titulo = "TOTAL EXISTENCIAS - TODAS LAS TIENDAS"
-            total = df_limpio['EXISTENCIA'].sum()
+        else:
+            df_f = df_limpio[df_limpio['ALMACEN'].astype(str) == str(seleccion)]
+            titulo = f"TOTAL EXISTENCIAS - {etiqueta(seleccion)}"
 
+        total = df_f['EXISTENCIA'].sum()
         st.markdown(f"""
         <div style="background-color:#e8f5e9; padding:15px; border-radius:10px; border:1px solid #4CAF50; margin-top:10px;">
             <p style="font-size:12px; color:gray; margin:0;">{titulo}</p>
@@ -232,7 +236,7 @@ with tab2:
         st.divider()
         st.write(f"**{len(df_f)} artículos encontrados**")
 
-        # TABLA FINAL SIN PROVEEDOR
+        # Tabla como ya te gustó: sin proveedor
         df_mostrar2 = df_f[['ARTICULO', 'BARRA', 'DESCRIPCION', 'EXISTENCIA', 'PRECIO VENTA CON IVA']].copy()
         st.dataframe(
             df_mostrar2,
@@ -243,5 +247,3 @@ with tab2:
                 "EXISTENCIA": st.column_config.NumberColumn(format="%d"),
             }
         )
-    else:
-        st.warning("Subí existencias_tiendas.xlsx a GitHub para que cargue solo en compu y teléfono, o usá el botón de arriba")
