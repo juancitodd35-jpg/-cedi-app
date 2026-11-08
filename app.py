@@ -12,7 +12,7 @@ st.title("RANSA • EXISTENCIA")
 tab1, tab2 = st.tabs(["📦 INVENTARIO RANSA", "🏪 EXISTENCIAS EN TIENDAS"])
 
 # ======================================================
-# PESTAÑA 1 - LA QUE YA TENIAS
+# PESTAÑA 1 - INVENTARIO RANSA - LIMPIA, SIN DATOS DE AYER
 # ======================================================
 with tab1:
     st.divider()
@@ -36,8 +36,8 @@ with tab1:
         st.warning("Subí tu inventario.xlsx para empezar")
     else:
         col_codigo = 'CODIGO' if 'CODIGO' in df.columns else df.columns[0]
-        col_ean = 'EAN'
-        col_desc = 'DESCRIPCION'
+        col_ean = 'EAN' if 'EAN' in df.columns else df.columns[1]
+        col_desc = 'DESCRIPCION' if 'DESCRIPCION' in df.columns else df.columns[2]
         col_cajas = 'TOTAL CAJAS' if 'TOTAL CAJAS' in df.columns else 'CAJAS'
         col_disp = 'UNI. DISPONIBLES' if 'UNI. DISPONIBLES' in df.columns else 'UNIDADES'
         col_bloq_u = 'U. BLOQUEADAS' if 'U. BLOQUEADAS' in df.columns else None
@@ -48,26 +48,8 @@ with tab1:
                 df[c] = pd.to_numeric(df[c], errors='coerce').fillna(0)
         df = df[df[col_codigo].notna()]
 
-        st.markdown("<p style='font-size:8px; margin-bottom:0px; color:gray;'>CODIGO DE PROVEEDOR</p>", unsafe_allow_html=True)
-        st.markdown("<p style='font-size:14px; margin-top:0px; font-weight:bold;'>004694</p>", unsafe_allow_html=True)
-        st.markdown("<p style='font-size:8px; margin-bottom:0px; color:gray;'>FECHA INICIO (YA EN TIENDA)</p>", unsafe_allow_html=True)
-        st.markdown("<p style='font-size:14px; margin-top:0px; font-weight:bold;'>4/11/2026</p>", unsafe_allow_html=True)
-        st.markdown("<p style='font-size:8px; margin-bottom:0px; color:gray;'>FECHA FIN (SALE DE ESPACIO)</p>", unsafe_allow_html=True)
-        st.markdown("<p style='font-size:14px; margin-top:0px; font-weight:bold;'>29/11/2026</p>", unsafe_allow_html=True)
-
-        st.markdown("<p style='font-size:8px; margin-bottom:2px; color:gray;'>CONTEO POR CANAL</p>", unsafe_allow_html=True)
-        c_b, c_s, c_w, c_t = st.columns(4)
-        with c_b:
-            st.write("BODEGA"); st.markdown("<h3 style='margin-top:-15px'>16</h3>", unsafe_allow_html=True)
-        with c_s:
-            st.write("SUPER"); st.markdown("<h3 style='margin-top:-15px'>17</h3>", unsafe_allow_html=True)
-        with c_w:
-            st.write("WALMART"); st.markdown("<h3 style='margin-top:-15px'>6</h3>", unsafe_allow_html=True)
-        with c_t:
-            st.write("TOTAL"); st.markdown("<h3 style='margin-top:-15px'>39</h3>", unsafe_allow_html=True)
-        st.divider()
-
-        busqueda = st.text_input("🔍 Buscar por nombre o por código", placeholder="Ej: 388151, CORN FLAKES, KELLOGS...", key="bus1")
+        # Buscador
+        busqueda = st.text_input("🔍 Buscar por nombre o por código", placeholder="Ej: 388151, CORN FLAKES...", key="bus1")
         if busqueda:
             texto = str(busqueda).lower().strip()
             df_f = df[
@@ -113,7 +95,7 @@ with tab1:
         st.dataframe(df_mostrar, use_container_width=True, hide_index=True)
 
 # ======================================================
-# PESTAÑA 2 - EXISTENCIAS EN TIENDAS - COMO PEDISTE
+# PESTAÑA 2 - EXISTENCIAS EN TIENDAS - COMO VOS LO PEDISTE HOY
 # ======================================================
 with tab2:
     st.divider()
@@ -143,16 +125,14 @@ with tab2:
             df2.columns = [str(c).strip() for c in df2.columns]
             cols = df2.columns.tolist()
 
-            # Detectar columnas
             col_suc = buscar_columna(cols, ["sucursal", "tienda", "numero tienda", "num tienda", "cod tienda", "codigo tienda"])
-            col_suc_desc = buscar_columna(cols, ["desc tienda", "descripcion tienda", "nombre tienda", "nombre sucursal", "desc sucursal", "descripcion sucursal", "tienda desc", "sucursal desc"])
+            col_suc_desc = buscar_columna(cols, ["desc tienda", "descripcion tienda", "nombre tienda", "nombre sucursal", "desc sucursal", "descripcion sucursal"])
             col_art = buscar_columna(cols, ["articulo", "artículo", "cod articulo", "codigo articulo", "item", "codigo", "cod producto"])
-            col_barra = buscar_columna(cols, ["barra", "ean", "codigo barra", "cod barra", "upc", "codigo de barra"])
+            col_barra = buscar_columna(cols, ["barra", "ean", "codigo barra", "cod barra", "upc"])
             col_desc = buscar_columna(cols, ["descripcion", "desc ", "desc", "nombre", "producto"])
             col_exis = buscar_columna(cols, ["existencia", "existencias", "stock", "saldo", "cantidad", "unidades"])
             col_precio = buscar_columna(cols, ["precio venta", "precio con iva", "precio iva", "pvp", "precio", "venta con iva"])
 
-            # Si la descripción de sucursal no existe, usamos la misma de sucursal
             if col_suc_desc is None:
                 col_suc_desc = col_suc
 
@@ -174,7 +154,6 @@ with tab2:
             with cc7:
                 col_precio = st.selectbox("PRECIO VENTA CON IVA", cols, index=cols.index(col_precio) if col_precio in cols else 0, key="cprecio")
 
-            # Tabla limpia en el orden que pediste
             df2_clean = pd.DataFrame()
             df2_clean['SUCURSAL'] = df2[col_suc]
             df2_clean['NOMBRE_SUCURSAL'] = df2[col_suc_desc]
@@ -185,7 +164,7 @@ with tab2:
             df2_clean['PRECIO VENTA CON IVA'] = pd.to_numeric(df2[col_precio], errors='coerce').fillna(0)
             df2_clean = df2_clean[df2_clean['SUCURSAL'].notna()]
 
-            # --- BUSCADOR DE SUCURSAL ---
+            # BUSCADOR SUCURSAL
             bus_suc = st.text_input("🔍 Buscar sucursal por código o nombre", placeholder="Ej: 123, WALMART SOYAPANGO...", key="bussuc")
             if bus_suc:
                 t = str(bus_suc).lower().strip()
@@ -196,8 +175,7 @@ with tab2:
             else:
                 df_suc_f = df2_clean.copy()
 
-            # --- TARJETA TOTAL EXISTENCIAS DE LA TIENDA ELEGIDA ---
-            # Si el buscador encontró 1 sola tienda, esa es la elegida
+            # TARJETA TOTAL EXISTENCIAS
             tiendas_unicas = df_suc_f['SUCURSAL'].astype(str).unique()
             if bus_suc and len(tiendas_unicas) == 1:
                 nombre_tienda = df_suc_f['NOMBRE_SUCURSAL'].iloc[0]
@@ -221,11 +199,7 @@ with tab2:
 
             st.divider()
             st.write(f"**{len(df_suc_f)} artículos encontrados**")
-
-            # --- TABLA FINAL EN EL ORDEN QUE PEDISTE ---
-            # A la izquierda: ARTICULO, BARRA, DESCRIPCION - luego EXISTENCIA, PRECIO
             df_mostrar2 = df_suc_f[['ARTICULO', 'BARRA', 'DESCRIPCION', 'EXISTENCIA', 'PRECIO VENTA CON IVA']].copy()
-
             st.dataframe(
                 df_mostrar2,
                 use_container_width=True,
