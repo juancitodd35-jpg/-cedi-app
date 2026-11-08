@@ -12,7 +12,7 @@ st.title("RANSA • EXISTENCIA")
 tab1, tab2 = st.tabs(["📦 INVENTARIO RANSA", "🏪 EXISTENCIAS EN TIENDAS"])
 
 # ======================================================
-# PESTAÑA 1 - INVENTARIO RANSA - LIMPIA, SIN DATOS DE AYER
+# PESTAÑA 1 - NO SE TOCA, YA ESTABA BIEN
 # ======================================================
 with tab1:
     st.divider()
@@ -48,7 +48,6 @@ with tab1:
                 df[c] = pd.to_numeric(df[c], errors='coerce').fillna(0)
         df = df[df[col_codigo].notna()]
 
-        # Buscador
         busqueda = st.text_input("🔍 Buscar por nombre o por código", placeholder="Ej: 388151, CORN FLAKES...", key="bus1")
         if busqueda:
             texto = str(busqueda).lower().strip()
@@ -95,19 +94,17 @@ with tab1:
         st.dataframe(df_mostrar, use_container_width=True, hide_index=True)
 
 # ======================================================
-# PESTAÑA 2 - EXISTENCIAS EN TIENDAS - COMO VOS LO PEDISTE HOY
+# PESTAÑA 2 - ARREGLADA, SIN CUADRITOS DE CORREGIR
+# Tu archivo trae 2 columnas que se llaman NOMBRE:
+# 1er NOMBRE = NOMBRE DE ALMACEN
+# 2do NOMBRE = DESCRIPCION DEL PRODUCTO
+# Por eso antes se confundía y te ponía 200,956 aunque buscaras Gigante
 # ======================================================
 with tab2:
     st.divider()
-    archivo2 = st.file_uploader("📂 Cargar archivo existencias en las tiendas", type=["xlsx", "xls", "csv"], key="tiendas")
 
-    def buscar_columna(columnas, palabras):
-        for col in columnas:
-            c = str(col).lower()
-            for p in palabras:
-                if p in c:
-                    return col
-        return None
+    # 1. BOTON CARGAR ARRIBA
+    archivo2 = st.file_uploader("📂 Cargar archivo existencias en las tiendas", type=["xlsx", "xls", "csv"], key="tiendas")
 
     if archivo2 is not None:
         try:
@@ -122,91 +119,79 @@ with tab2:
             df2 = pd.DataFrame()
 
         if not df2.empty:
-            df2.columns = [str(c).strip() for c in df2.columns]
-            cols = df2.columns.tolist()
+            # Limpiar nombres
+            df2.columns = [str(c).strip().upper() for c in df2.columns]
 
-            col_suc = buscar_columna(cols, ["sucursal", "tienda", "numero tienda", "num tienda", "cod tienda", "codigo tienda"])
-            col_suc_desc = buscar_columna(cols, ["desc tienda", "descripcion tienda", "nombre tienda", "nombre sucursal", "desc sucursal", "descripcion sucursal"])
-            col_art = buscar_columna(cols, ["articulo", "artículo", "cod articulo", "codigo articulo", "item", "codigo", "cod producto"])
-            col_barra = buscar_columna(cols, ["barra", "ean", "codigo barra", "cod barra", "upc"])
-            col_desc = buscar_columna(cols, ["descripcion", "desc ", "desc", "nombre", "producto"])
-            col_exis = buscar_columna(cols, ["existencia", "existencias", "stock", "saldo", "cantidad", "unidades"])
-            col_precio = buscar_columna(cols, ["precio venta", "precio con iva", "precio iva", "pvp", "precio", "venta con iva"])
+            # --- MAPEO FIJO POR POSICION DE TUS COLUMNAS ---
+            # Tu archivo viene así: NOMBRE, COD PROVEEDOR, ARTICULO, BARRA, NOMBRE, EXISTENCIA, PRECIO VENTA CON IVA
+            # Por eso usamos posición, no nombre, para no confundir los 2 NOMBRE
+            cols_lista = df2.columns.tolist()
 
-            if col_suc_desc is None:
-                col_suc_desc = col_suc
+            # Buscar por nombre exacto, pero para NOMBRE usamos posición
+            # Primer NOMBRE = Almacén, Segundo NOMBRE = Descripción
+            idx_nombre = [i for i, c in enumerate(cols_lista) if c == 'NOMBRE']
+            col_almacen = df2.columns[idx_nombre[0]] if len(idx_nombre) > 0 else df2.columns[0]
+            col_descripcion = df2.columns[idx_nombre[1]] if len(idx_nombre) > 1 else df2.columns[4]
 
-            st.write("**Si alguna columna está mal, la corregís aquí:**")
-            cc1, cc2, cc3, cc4 = st.columns(4)
-            with cc1:
-                col_suc = st.selectbox("SUCURSAL (código)", cols, index=cols.index(col_suc) if col_suc in cols else 0, key="csuc")
-            with cc2:
-                col_suc_desc = st.selectbox("NOMBRE SUCURSAL", cols, index=cols.index(col_suc_desc) if col_suc_desc in cols else 0, key="csucd")
-            with cc3:
-                col_art = st.selectbox("ARTÍCULO", cols, index=cols.index(col_art) if col_art in cols else 0, key="cart")
-            with cc4:
-                col_barra = st.selectbox("BARRA", cols, index=cols.index(col_barra) if col_barra in cols else 0, key="cbarra")
-            cc5, cc6, cc7 = st.columns(3)
-            with cc5:
-                col_desc = st.selectbox("DESCRIPCIÓN", cols, index=cols.index(col_desc) if col_desc in cols else 0, key="cdesc")
-            with cc6:
-                col_exis = st.selectbox("EXISTENCIA", cols, index=cols.index(col_exis) if col_exis in cols else 0, key="cexis")
-            with cc7:
-                col_precio = st.selectbox("PRECIO VENTA CON IVA", cols, index=cols.index(col_precio) if col_precio in cols else 0, key="cprecio")
+            # Las demás por nombre
+            def col_por_nombre(buscar):
+                for c in cols_lista:
+                    if buscar in c:
+                        return c
+                return None
 
-            df2_clean = pd.DataFrame()
-            df2_clean['SUCURSAL'] = df2[col_suc]
-            df2_clean['NOMBRE_SUCURSAL'] = df2[col_suc_desc]
-            df2_clean['ARTICULO'] = df2[col_art]
-            df2_clean['BARRA'] = df2[col_barra]
-            df2_clean['DESCRIPCION'] = df2[col_desc]
-            df2_clean['EXISTENCIA'] = pd.to_numeric(df2[col_exis], errors='coerce').fillna(0)
-            df2_clean['PRECIO VENTA CON IVA'] = pd.to_numeric(df2[col_precio], errors='coerce').fillna(0)
-            df2_clean = df2_clean[df2_clean['SUCURSAL'].notna()]
+            col_articulo = col_por_nombre('ARTICULO')
+            col_barra = col_por_nombre('BARRA')
+            col_existencia = col_por_nombre('EXISTENCIA')
+            col_precio = col_por_nombre('PRECIO')
 
-            # BUSCADOR SUCURSAL
-            bus_suc = st.text_input("🔍 Buscar sucursal por código o nombre", placeholder="Ej: 123, WALMART SOYAPANGO...", key="bussuc")
-            if bus_suc:
-                t = str(bus_suc).lower().strip()
-                df_suc_f = df2_clean[
-                    df2_clean['SUCURSAL'].astype(str).str.lower().str.contains(t, na=False) |
-                    df2_clean['NOMBRE_SUCURSAL'].astype(str).str.lower().str.contains(t, na=False)
-                ]
+            # Construir tabla limpia SOLO con lo que pediste
+            df_limpio = pd.DataFrame()
+            df_limpio['ARTICULO'] = df2[col_articulo]
+            df_limpio['BARRA'] = df2[col_barra]
+            df_limpio['DESCRIPCION'] = df2[col_descripcion]
+            df_limpio['NOMBRE DE ALMACEN'] = df2[col_almacen]
+            df_limpio['PRECIO VENTA CON IVA'] = pd.to_numeric(df2[col_precio], errors='coerce').fillna(0)
+            # EXISTENCIA solo la usamos para la tarjeta, no se muestra en la tabla
+            df_limpio['_EXISTENCIA'] = pd.to_numeric(df2[col_existencia], errors='coerce').fillna(0)
+            df_limpio = df_limpio[df_limpio['NOMBRE DE ALMACEN'].notna()]
+
+            # 2. BUSCADOR POR CODIGO O NOMBRE DE ALMACEN
+            bus = st.text_input("🔍 Buscar almacén por código o nombre", placeholder="Ej: 123, GIGANTE...", key="bus_almacen")
+            if bus:
+                t = str(bus).lower().strip()
+                df_f = df_limpio[df_limpio['NOMBRE DE ALMACEN'].astype(str).str.lower().str.contains(t, na=False)]
             else:
-                df_suc_f = df2_clean.copy()
+                df_f = df_limpio.copy()
 
-            # TARJETA TOTAL EXISTENCIAS
-            tiendas_unicas = df_suc_f['SUCURSAL'].astype(str).unique()
-            if bus_suc and len(tiendas_unicas) == 1:
-                nombre_tienda = df_suc_f['NOMBRE_SUCURSAL'].iloc[0]
-                total_tienda = df_suc_f['EXISTENCIA'].sum()
-                st.markdown(f"""
-                <div style="background-color:#e8f5e9; padding:15px; border-radius:10px; border:1px solid #4CAF50; margin-top:10px;">
-                    <p style="font-size:12px; color:gray; margin:0;">TOTAL EXISTENCIAS - TIENDA ELEGIDA</p>
-                    <p style="font-size:18px; font-weight:bold; margin:0;">{tiendas_unicas[0]} - {nombre_tienda}</p>
-                    <p style="font-size:32px; font-weight:bold; margin:0; color:#2E7D32;">{int(total_tienda):,}</p>
-                </div>
-                """, unsafe_allow_html=True)
-            elif bus_suc and len(tiendas_unicas) > 1:
-                st.info(f"Encontré {len(tiendas_unicas)} sucursales con ese texto. Escribí el código exacto para ver la tarjeta de una sola tienda. Total de esas tiendas: {int(df_suc_f['EXISTENCIA'].sum()):,}")
+            # 3. TARJETA TOTAL EXISTENCIAS DEL ALMACEN ELEGIDO
+            if bus:
+                # Si buscaste algo, la tarjeta es solo de lo filtrado
+                total = df_f['_EXISTENCIA'].sum()
+                nombre_mostrar = df_f['NOMBRE DE ALMACEN'].iloc[0] if len(df_f) > 0 else bus
+                titulo = f"TOTAL EXISTENCIAS - {nombre_mostrar}"
             else:
-                st.markdown(f"""
-                <div style="background-color:#f1f1f1; padding:15px; border-radius:10px; margin-top:10px;">
-                    <p style="font-size:12px; color:gray; margin:0;">TOTAL EXISTENCIAS - TODAS LAS TIENDAS</p>
-                    <p style="font-size:32px; font-weight:bold; margin:0;">{int(df2_clean['EXISTENCIA'].sum()):,}</p>
-                </div>
-                """, unsafe_allow_html=True)
+                total = df_limpio['_EXISTENCIA'].sum()
+                titulo = "TOTAL EXISTENCIAS - TODAS LAS TIENDAS"
+
+            st.markdown(f"""
+            <div style="background-color:#e8f5e9; padding:15px; border-radius:10px; border:1px solid #4CAF50; margin-top:10px;">
+                <p style="font-size:12px; color:gray; margin:0;">{titulo}</p>
+                <p style="font-size:32px; font-weight:bold; margin:0; color:#2E7D32;">{int(total):,}</p>
+            </div>
+            """, unsafe_allow_html=True)
 
             st.divider()
-            st.write(f"**{len(df_suc_f)} artículos encontrados**")
-            df_mostrar2 = df_suc_f[['ARTICULO', 'BARRA', 'DESCRIPCION', 'EXISTENCIA', 'PRECIO VENTA CON IVA']].copy()
+            st.write(f"**{len(df_f)} artículos encontrados**")
+
+            # 4. TABLA FINAL - SOLO LO QUE PEDISTE
+            df_mostrar2 = df_f[['ARTICULO', 'BARRA', 'DESCRIPCION', 'NOMBRE DE ALMACEN', 'PRECIO VENTA CON IVA']].copy()
             st.dataframe(
                 df_mostrar2,
                 use_container_width=True,
                 hide_index=True,
                 column_config={
                     "PRECIO VENTA CON IVA": st.column_config.NumberColumn(format="$ %.2f"),
-                    "EXISTENCIA": st.column_config.NumberColumn(format="%d"),
                 }
             )
     else:
