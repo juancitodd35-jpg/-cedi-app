@@ -34,23 +34,15 @@ def columnas_unicas(cols):
             nuevas.append(c)
     return nuevas
 
-def leer_con_encabezado_automatico(ruta_o_archivo, es_archivo_subido=False):
-    # Busca en las primeras 5 filas cuál es la que dice CODIGO / DESCRIPCION
-    # Así no importa si el encabezado está en la fila 1, 2 o 3
+def leer_con_encabezado_automatico(ruta_o_archivo):
     for h in range(5):
         try:
-            if es_archivo_subido:
-                df = pd.read_excel(ruta_o_archivo, header=h)
-            else:
-                df = pd.read_excel(ruta_o_archivo, header=h)
+            df = pd.read_excel(ruta_o_archivo, header=h)
             cols_txt = " ".join([str(c).lower() for c in df.columns])
             if "codigo" in cols_txt or "descripcion" in cols_txt or "articulo" in cols_txt:
                 return df, h
         except:
             continue
-    # Si no encontró, devolver con header=1
-    if es_archivo_subido:
-        return pd.read_excel(ruta_o_archivo, header=1), 1
     return pd.read_excel(ruta_o_archivo, header=1), 1
 
 # ================= PESTAÑA 1 =================
@@ -59,11 +51,10 @@ with tab1:
     archivo1 = st.file_uploader("Cargar inventario.xlsx", type=["xlsx", "xls"], key="inv1")
 
     df = pd.DataFrame()
-    fila_enc = 1
     if archivo1 is not None:
-        df, fila_enc = leer_con_encabezado_automatico(archivo1, True)
+        df, _ = leer_con_encabezado_automatico(archivo1)
     elif os.path.exists("inventario.xlsx"):
-        df, fila_enc = leer_con_encabezado_automatico("inventario.xlsx", False)
+        df, _ = leer_con_encabezado_automatico("inventario.xlsx")
 
     if df.empty:
         st.warning("Subí inventario.xlsx a GitHub")
@@ -72,7 +63,6 @@ with tab1:
         df = df.loc[:, ~df.columns.str.contains('UNNAMED')]
         df = df.dropna(how='all')
         cols = df.columns.tolist()
-        st.caption(f"Encabezado encontrado en fila: {fila_enc+1} | Columnas: {', '.join(cols)}")
 
         col_cod = buscar(cols, ['codigo', 'articulo'])
         col_ean = buscar(cols, ['ean', 'barra'])
@@ -80,11 +70,8 @@ with tab1:
         col_cajas = buscar(cols, ['cajas'])
         col_disp = buscar(cols, ['disponible', 'existencia'])
 
-        # Si no encuentra CODIGO / DESCRIPCION, es que el archivo NO es el inventario
         if col_cod is None or col_desc is None:
-            st.error("⚠️ Este archivo NO es el inventario bueno. No trae columnas CODIGO / DESCRIPCION. Borralo de GitHub y subí el inventario bueno.")
-            st.write("Primeras filas que sí trae el archivo:")
-            st.dataframe(df.head(10), use_container_width=True)
+            st.error("⚠️ Este archivo NO es el inventario bueno. No trae CODIGO / DESCRIPCION.")
         else:
             if col_ean is None:
                 col_ean = col_cod
@@ -115,13 +102,28 @@ with tab1:
             c2.metric("TOTAL CAJAS", f"{int(df[col_cajas].sum()):,}")
             st.divider()
             st.write(f"**{len(df_f)} productos**")
+
             out = pd.DataFrame()
-            out['CODIGO'] = df_f[col_cod]
-            out['EAN'] = df_f[col_ean]
-            out['DESCRIPCION'] = df_f[col_desc]
-            out['CAJAS'] = df_f[col_cajas]
-            out['UNIDADES DISPONIBLES'] = df_f[col_disp]
-            st.dataframe(out, use_container_width=True, hide_index=True)
+            out['CODIGO'] = df_f[col_cod].astype(str)
+            out['EAN'] = df_f[col_ean].astype(str)
+            out['DESCRIPCION'] = df_f[col_desc].astype(str)
+            out['CAJAS'] = df_f[col_cajas].astype(int)
+            out['UNIDADES DISPONIBLES'] = df_f[col_disp].astype(int)
+
+            # --- TABLA FIJA, SIN SALTOS, DESCRIPCION ANCHA ---
+            st.dataframe(
+                out,
+                use_container_width=True,
+                hide_index=True,
+                height=600,
+                column_config={
+                    "CODIGO": st.column_config.TextColumn("CODIGO", width="small"),
+                    "EAN": st.column_config.TextColumn("EAN", width="medium"),
+                    "DESCRIPCION": st.column_config.TextColumn("DESCRIPCION", width="large"),
+                    "CAJAS": st.column_config.NumberColumn("CAJAS", width="small"),
+                    "UNIDADES DISPONIBLES": st.column_config.NumberColumn("UNIDADES DISPONIBLES", width="medium"),
+                }
+            )
 
 # ================= PESTAÑA 2 =================
 with tab2:
@@ -172,22 +174,31 @@ with tab2:
         col_prec = buscar(cols2, ['precio'])
 
         mapa_desc = {}
+        mapa_barra = {}
         if os.path.exists("inventario.xlsx"):
             try:
-                di, _ = leer_con_encabezado_automatico("inventario.xlsx", False)
+                di, _ = leer_con_encabezado_automatico("inventario.xlsx")
                 di.columns = columnas_unicas(di.columns)
                 ci = buscar(di.columns.tolist(), ['codigo', 'articulo'])
+                ce = buscar(di.columns.tolist(), ['ean', 'barra'])
                 dd = buscar(di.columns.tolist(), ['descripcion', 'descrip'])
                 if ci and dd:
                     for _, r in di.iterrows():
-                        mapa_desc[limpiar(r[ci])] = str(r[dd]).strip()
+                        desc = str(r[dd]).strip()
+                        if desc and desc.lower() != "nan":
+                            mapa_desc[limpiar(r[ci])] = desc
+                            if ce:
+                                mapa_barra[limpiar(r[ce])] = desc
             except:
                 pass
 
         limpio = pd.DataFrame()
         limpio['ARTICULO'] = df2[col_art].astype(str).apply(limpiar) if col_art else ""
-        limpio['BARRA'] = df2[col_barra].astype(str) if col_barra else ""
-        limpio['DESCRIPCION'] = limpio['ARTICULO'].map(mapa_desc).fillna("")
+        limpio['BARRA'] = df2[col_barra].astype(str).apply(limpiar) if col_barra else ""
+        # Buscar por CODIGO, si no hay, por BARRA
+        desc1 = limpio['ARTICULO'].map(mapa_desc)
+        desc2 = limpio['BARRA'].map(mapa_barra)
+        limpio['DESCRIPCION'] = desc1.fillna(desc2).fillna("").astype(str)
         limpio['EXISTENCIA'] = pd.to_numeric(df2[col_ex], errors='coerce').fillna(0) if col_ex else 0
         limpio['PRECIO'] = pd.to_numeric(df2[col_prec], errors='coerce').fillna(0) if col_prec else 0
         if col_alm:
@@ -219,4 +230,25 @@ with tab2:
         st.metric("TOTAL EXISTENCIAS", f"{int(df_f['EXISTENCIA'].sum()):,}")
         st.divider()
         st.write(f"**{len(df_f)} artículos**")
-        st.dataframe(df_f[['ARTICULO', 'BARRA', 'DESCRIPCION', 'EXISTENCIA', 'PRECIO']], use_container_width=True, hide_index=True, column_config={"PRECIO": st.column_config.NumberColumn(format="$ %.2f")})
+
+        mostrar2 = pd.DataFrame()
+        mostrar2['ARTICULO'] = df_f['ARTICULO'].astype(str)
+        mostrar2['BARRA'] = df_f['BARRA'].astype(str)
+        mostrar2['DESCRIPCION'] = df_f['DESCRIPCION'].astype(str)
+        mostrar2['EXISTENCIA'] = df_f['EXISTENCIA'].astype(int)
+        mostrar2['PRECIO'] = df_f['PRECIO'].astype(float)
+
+        # --- TABLA FIJA, DESCRIPCION ANCHA Y COMPLETA ---
+        st.dataframe(
+            mostrar2,
+            use_container_width=True,
+            hide_index=True,
+            height=600,
+            column_config={
+                "ARTICULO": st.column_config.TextColumn("ARTICULO", width="small"),
+                "BARRA": st.column_config.TextColumn("BARRA", width="medium"),
+                "DESCRIPCION": st.column_config.TextColumn("DESCRIPCION", width="large"),
+                "EXISTENCIA": st.column_config.NumberColumn("EXISTENCIA", width="small"),
+                "PRECIO": st.column_config.NumberColumn("PRECIO", format="$ %.2f", width="small"),
+            }
+        )
