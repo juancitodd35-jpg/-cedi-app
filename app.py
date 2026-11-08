@@ -34,16 +34,36 @@ def columnas_unicas(cols):
             nuevas.append(c)
     return nuevas
 
+def leer_con_encabezado_automatico(ruta_o_archivo, es_archivo_subido=False):
+    # Busca en las primeras 5 filas cuál es la que dice CODIGO / DESCRIPCION
+    # Así no importa si el encabezado está en la fila 1, 2 o 3
+    for h in range(5):
+        try:
+            if es_archivo_subido:
+                df = pd.read_excel(ruta_o_archivo, header=h)
+            else:
+                df = pd.read_excel(ruta_o_archivo, header=h)
+            cols_txt = " ".join([str(c).lower() for c in df.columns])
+            if "codigo" in cols_txt or "descripcion" in cols_txt or "articulo" in cols_txt:
+                return df, h
+        except:
+            continue
+    # Si no encontró, devolver con header=1
+    if es_archivo_subido:
+        return pd.read_excel(ruta_o_archivo, header=1), 1
+    return pd.read_excel(ruta_o_archivo, header=1), 1
+
 # ================= PESTAÑA 1 =================
 with tab1:
     st.write("Inventario de bodega RANSA")
     archivo1 = st.file_uploader("Cargar inventario.xlsx", type=["xlsx", "xls"], key="inv1")
 
     df = pd.DataFrame()
+    fila_enc = 1
     if archivo1 is not None:
-        df = pd.read_excel(archivo1, header=1)
+        df, fila_enc = leer_con_encabezado_automatico(archivo1, True)
     elif os.path.exists("inventario.xlsx"):
-        df = pd.read_excel("inventario.xlsx", header=1)
+        df, fila_enc = leer_con_encabezado_automatico("inventario.xlsx", False)
 
     if df.empty:
         st.warning("Subí inventario.xlsx a GitHub")
@@ -52,47 +72,56 @@ with tab1:
         df = df.loc[:, ~df.columns.str.contains('UNNAMED')]
         df = df.dropna(how='all')
         cols = df.columns.tolist()
+        st.caption(f"Encabezado encontrado en fila: {fila_enc+1} | Columnas: {', '.join(cols)}")
 
-        col_cod = buscar(cols, ['codigo', 'articulo']) or cols[0]
-        col_ean = buscar(cols, ['ean', 'barra']) or cols[0]
-        col_desc = buscar(cols, ['descripcion', 'descrip']) or cols[0]
+        col_cod = buscar(cols, ['codigo', 'articulo'])
+        col_ean = buscar(cols, ['ean', 'barra'])
+        col_desc = buscar(cols, ['descripcion', 'descrip'])
         col_cajas = buscar(cols, ['cajas'])
         col_disp = buscar(cols, ['disponible', 'existencia'])
 
-        if col_cajas is None:
-            df['CAJAS_X'] = 0
-            col_cajas = 'CAJAS_X'
-        if col_disp is None:
-            df['DISP_X'] = 0
-            col_disp = 'DISP_X'
-
-        df[col_cajas] = pd.to_numeric(df[col_cajas], errors='coerce').fillna(0)
-        df[col_disp] = pd.to_numeric(df[col_disp], errors='coerce').fillna(0)
-        df = df[df[col_cod].notna()]
-
-        bus = st.text_input("🔍 Buscar por código o nombre", key="bus1")
-        if bus:
-            t = bus.lower().strip()
-            df_f = df[
-                df[col_cod].astype(str).str.lower().str.contains(t, na=False) |
-                df[col_desc].astype(str).str.lower().str.contains(t, na=False) |
-                df[col_ean].astype(str).str.lower().str.contains(t, na=False)
-            ]
+        # Si no encuentra CODIGO / DESCRIPCION, es que el archivo NO es el inventario
+        if col_cod is None or col_desc is None:
+            st.error("⚠️ Este archivo NO es el inventario bueno. No trae columnas CODIGO / DESCRIPCION. Borralo de GitHub y subí el inventario bueno.")
+            st.write("Primeras filas que sí trae el archivo:")
+            st.dataframe(df.head(10), use_container_width=True)
         else:
-            df_f = df.copy()
+            if col_ean is None:
+                col_ean = col_cod
+            if col_cajas is None:
+                df['CAJAS_X'] = 0
+                col_cajas = 'CAJAS_X'
+            if col_disp is None:
+                df['DISP_X'] = 0
+                col_disp = 'DISP_X'
 
-        c1, c2 = st.columns(2)
-        c1.metric("TOTAL UNIDADES DISPONIBLES", f"{int(df[col_disp].sum()):,}")
-        c2.metric("TOTAL CAJAS", f"{int(df[col_cajas].sum()):,}")
-        st.divider()
-        st.write(f"**{len(df_f)} productos**")
-        out = pd.DataFrame()
-        out['CODIGO'] = df_f[col_cod]
-        out['EAN'] = df_f[col_ean]
-        out['DESCRIPCION'] = df_f[col_desc]
-        out['CAJAS'] = df_f[col_cajas]
-        out['UNIDADES DISPONIBLES'] = df_f[col_disp]
-        st.dataframe(out, use_container_width=True, hide_index=True)
+            df[col_cajas] = pd.to_numeric(df[col_cajas], errors='coerce').fillna(0)
+            df[col_disp] = pd.to_numeric(df[col_disp], errors='coerce').fillna(0)
+            df = df[df[col_cod].notna()]
+
+            bus = st.text_input("🔍 Buscar por código o nombre", key="bus1")
+            if bus:
+                t = bus.lower().strip()
+                df_f = df[
+                    df[col_cod].astype(str).str.lower().str.contains(t, na=False) |
+                    df[col_desc].astype(str).str.lower().str.contains(t, na=False) |
+                    df[col_ean].astype(str).str.lower().str.contains(t, na=False)
+                ]
+            else:
+                df_f = df.copy()
+
+            c1, c2 = st.columns(2)
+            c1.metric("TOTAL UNIDADES DISPONIBLES", f"{int(df[col_disp].sum()):,}")
+            c2.metric("TOTAL CAJAS", f"{int(df[col_cajas].sum()):,}")
+            st.divider()
+            st.write(f"**{len(df_f)} productos**")
+            out = pd.DataFrame()
+            out['CODIGO'] = df_f[col_cod]
+            out['EAN'] = df_f[col_ean]
+            out['DESCRIPCION'] = df_f[col_desc]
+            out['CAJAS'] = df_f[col_cajas]
+            out['UNIDADES DISPONIBLES'] = df_f[col_disp]
+            st.dataframe(out, use_container_width=True, hide_index=True)
 
 # ================= PESTAÑA 2 =================
 with tab2:
@@ -142,11 +171,10 @@ with tab2:
         col_ex = buscar(cols2, ['existencia'])
         col_prec = buscar(cols2, ['precio'])
 
-        # Descripción desde inventario.xlsx, nunca desde NOMBRE (KELLOGG)
         mapa_desc = {}
         if os.path.exists("inventario.xlsx"):
             try:
-                di = pd.read_excel("inventario.xlsx", header=1, dtype=str)
+                di, _ = leer_con_encabezado_automatico("inventario.xlsx", False)
                 di.columns = columnas_unicas(di.columns)
                 ci = buscar(di.columns.tolist(), ['codigo', 'articulo'])
                 dd = buscar(di.columns.tolist(), ['descripcion', 'descrip'])
