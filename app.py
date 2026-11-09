@@ -48,12 +48,10 @@ def leer_con_encabezado_automatico(ruta_o_archivo):
 # ================= PESTAÑA 1 - D=CODIGO, E=EAN, J=DESCRIPCION, K=CAJAS, L=UNIDADES =================
 with tab1:
     st.write("Inventario de bodega RANSA")
-    archivo1 = st.file_uploader("Cargar inventario.xlsx", type=["xlsx", "xls"], key="inv1")
+    # BOTON DE CARGA QUITADO - Solo lee de GitHub
 
     df = pd.DataFrame()
-    if archivo1 is not None:
-        df, _ = leer_con_encabezado_automatico(archivo1)
-    elif os.path.exists("inventario.xlsx"):
+    if os.path.exists("inventario.xlsx"):
         df, _ = leer_con_encabezado_automatico("inventario.xlsx")
 
     if df.empty:
@@ -128,25 +126,10 @@ with tab1:
 # ================= PESTAÑA 2 - IGUAL QUE EL DE LAS 2:02, NO SE TOCA =================
 with tab2:
     st.write("Existencias en tiendas")
-    archivo2 = st.file_uploader("Cargar existencias_tiendas.xlsx", type=["xlsx", "xls", "csv"], key="inv2")
+    # BOTON DE CARGA QUITADO - Solo lee de GitHub
 
     df2 = pd.DataFrame()
-    if archivo2 is not None:
-        if archivo2.name.endswith(".csv"):
-            df2 = pd.read_csv(archivo2, dtype=str)
-        else:
-            xl = pd.ExcelFile(archivo2)
-            lista = []
-            for hoja in xl.sheet_names:
-                d = pd.read_excel(archivo2, sheet_name=hoja, header=0, dtype=str)
-                d.columns = columnas_unicas(d.columns)
-                if sum(['UNNAMED' in str(c) for c in d.columns]) > 3:
-                    d = pd.read_excel(archivo2, sheet_name=hoja, header=1, dtype=str)
-                    d.columns = columnas_unicas(d.columns)
-                d['HOJA'] = hoja
-                lista.append(d)
-            df2 = pd.concat(lista, ignore_index=True)
-    elif os.path.exists("existencias_tiendas.xlsx"):
+    if os.path.exists("existencias_tiendas.xlsx"):
         xl = pd.ExcelFile("existencias_tiendas.xlsx")
         lista = []
         for hoja in xl.sheet_names:
