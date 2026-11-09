@@ -5,21 +5,6 @@ import os
 st.set_page_config(page_title="RANSA - EXISTENCIA", layout="wide")
 st.title("RANSA • EXISTENCIA")
 
-# --- CSS para centrar los números ---
-st.markdown("""
-<style>
-/* Centra el contenido de las celdas de las tablas */
-div[data-testid="stDataFrame"] div[role="gridcell"] {
-    justify-content: center !important;
-    text-align: center !important;
-}
-/* Pero la DESCRIPCION siempre a la izquierda para que se lea bien */
-div[data-testid="stDataFrame"] div[data-testid="stDataFrameCell"] {
-    text-align: left;
-}
-</style>
-""", unsafe_allow_html=True)
-
 tab1, tab2 = st.tabs(["📦 INVENTARIO RANSA", "🏪 EXISTENCIAS EN TIENDAS"])
 
 def limpiar(x):
@@ -134,7 +119,6 @@ with tab1:
                     "CODIGO": st.column_config.TextColumn("CODIGO", width="small"),
                     "EAN": st.column_config.TextColumn("EAN", width="medium"),
                     "DESCRIPCION": st.column_config.TextColumn("DESCRIPCION", width="large"),
-                    # Centrados y angostos
                     "CAJAS": st.column_config.NumberColumn("CAJAS", width="small", format="%d"),
                     "UNIDADES DISPONIBLES": st.column_config.NumberColumn("UNIDADES DISPONIBLES", width="medium", format="%d"),
                 }
@@ -187,43 +171,36 @@ with tab2:
         col_barra = buscar(cols2, ['barra', 'ean'])
         col_ex = buscar(cols2, ['existencia'])
         col_prec = buscar(cols2, ['precio'])
-        # Columnas NOMBRE repetidas: NOMBRE, NOMBRE_2, etc. - para usar como respaldo si no está en inventario
-        cols_nombre = [c for c in cols2 if c.startswith('NOMBRE') and c != col_nom_alm]
-
-        mapa_desc = {}
-        mapa_barra = {}
-        if os.path.exists("inventario.xlsx"):
-            try:
-                di, _ = leer_con_encabezado_automatico("inventario.xlsx")
-                di.columns = columnas_unicas(di.columns)
-                ci = buscar(di.columns.tolist(), ['codigo', 'articulo'])
-                ce = buscar(di.columns.tolist(), ['ean', 'barra'])
-                dd = buscar(di.columns.tolist(), ['descripcion', 'descrip'])
-                if ci and dd:
-                    for _, r in di.iterrows():
-                        desc = str(r[dd]).strip()
-                        if desc and desc.lower() != "nan":
-                            mapa_desc[limpiar(r[ci])] = desc
-                            if ce:
-                                mapa_barra[limpiar(r[ce])] = desc
-            except:
-                pass
+        # AHORA SI: la DESCRIPCION viene en el mismo archivo de tiendas, columna E
+        col_desc_tiendas = buscar(cols2, ['descripcion', 'descrip'])
 
         limpio = pd.DataFrame()
         limpio['ARTICULO'] = df2[col_art].astype(str).apply(limpiar) if col_art else ""
         limpio['BARRA'] = df2[col_barra].astype(str).apply(limpiar) if col_barra else ""
 
-        desc1 = limpio['ARTICULO'].map(mapa_desc)
-        desc2 = limpio['BARRA'].map(mapa_barra)
-        limpio['DESCRIPCION'] = desc1.fillna(desc2).fillna("").astype(str)
+        # 1) PRIMERO usar la DESCRIPCION que ya viene en tiendas (la completa)
+        if col_desc_tiendas:
+            limpio['DESCRIPCION'] = df2[col_desc_tiendas].astype(str).str.strip()
+            limpio['DESCRIPCION'] = limpio['DESCRIPCION'].replace({"nan": "", "None": ""})
+        else:
+            limpio['DESCRIPCION'] = ""
 
-        # Respaldo: si sigue en blanco, probar con la 2da columna NOMBRE del archivo de tiendas, si no es KELLOGG
-        if cols_nombre:
-            for cn in cols_nombre:
-                respaldo = df2[cn].astype(str).str.strip()
-                # Solo usar si no es KELLOGG, no es el nombre del almacén y no está vacío
-                valido = (~respaldo.str.upper().str.contains("KELLOGG")) & (respaldo != "") & (respaldo.str.lower() != "nan")
-                limpio.loc[(limpio['DESCRIPCION'] == "") & valido, 'DESCRIPCION'] = respaldo[(limpio['DESCRIPCION'] == "") & valido].values
+        # 2) Solo si en tiendas viene en blanco, buscar en inventario como respaldo
+        en_blanco_antes = (limpio['DESCRIPCION'] == "").sum()
+        if en_blanco_antes > 0 and os.path.exists("inventario.xlsx"):
+            try:
+                di, _ = leer_con_encabezado_automatico("inventario.xlsx")
+                di.columns = columnas_unicas(di.columns)
+                ci = buscar(di.columns.tolist(), ['codigo', 'articulo'])
+                dd = buscar(di.columns.tolist(), ['descripcion', 'descrip'])
+                if ci and dd:
+                    mapa = {}
+                    for _, r in di.iterrows():
+                        mapa[limpiar(r[ci])] = str(r[dd]).strip()
+                    respaldo = limpio['ARTICULO'].map(mapa).fillna("")
+                    limpio.loc[limpio['DESCRIPCION'] == "", 'DESCRIPCION'] = respaldo[limpio['DESCRIPCION'] == ""].values
+            except:
+                pass
 
         limpio['EXISTENCIA'] = pd.to_numeric(df2[col_ex], errors='coerce').fillna(0) if col_ex else 0
         limpio['PRECIO'] = pd.to_numeric(df2[col_prec], errors='coerce').fillna(0) if col_prec else 0
@@ -238,11 +215,6 @@ with tab2:
 
         limpio = limpio[limpio['ARTICULO'] != ""]
         limpio = limpio[limpio['ARTICULO'] != "nan"]
-
-        # Avisar cuántas quedan en blanco y por qué
-        en_blanco = (limpio['DESCRIPCION'] == "").sum()
-        if en_blanco > 0:
-            st.caption(f"⚠️ {int(en_blanco)} productos sin descripción porque no están en inventario.xlsx (ni por CODIGO ni por BARRA). Agregalos al inventario y ya salen.")
 
         codigos = sorted(limpio['COD_ALMACEN'].unique().tolist())
         def etiqueta(c):
@@ -278,14 +250,7 @@ with tab2:
                 "ARTICULO": st.column_config.TextColumn("ARTICULO", width="small"),
                 "BARRA": st.column_config.TextColumn("BARRA", width="medium"),
                 "DESCRIPCION": st.column_config.TextColumn("DESCRIPCION", width="large"),
-                # Centrados y más reducidos
                 "EXISTENCIA": st.column_config.NumberColumn("EXISTENCIA", width="small", format="%d"),
                 "PRECIO": st.column_config.NumberColumn("PRECIO", format="$ %.2f", width="small"),
             }
         )
-
-        # Para que veas cuáles faltan
-        if en_blanco > 0:
-            with st.expander(f"Ver los {int(en_blanco)} productos sin descripción (para agregar al inventario)"):
-                faltan = limpio[limpio['DESCRIPCION'] == ""][['ARTICULO', 'BARRA']].drop_duplicates().head(50)
-                st.dataframe(faltan, use_container_width=True, hide_index=True)
