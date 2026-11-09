@@ -45,7 +45,7 @@ def leer_con_encabezado_automatico(ruta_o_archivo):
             continue
     return pd.read_excel(ruta_o_archivo, header=1), 1
 
-# ================= PESTAÑA 1 =================
+# ================= PESTAÑA 1 - D=CODIGO, E=EAN, J=DESCRIPCION, K=CAJAS, L=UNIDADES =================
 with tab1:
     st.write("Inventario de bodega RANSA")
     archivo1 = st.file_uploader("Cargar inventario.xlsx", type=["xlsx", "xls"], key="inv1")
@@ -62,53 +62,52 @@ with tab1:
         df.columns = columnas_unicas(df.columns)
         df = df.loc[:, ~df.columns.str.contains('UNNAMED')]
         df = df.dropna(how='all')
-        cols = df.columns.tolist()
 
-        col_cod = buscar(cols, ['codigo', 'articulo'])
-        col_ean = buscar(cols, ['ean', 'barra'])
-        col_desc = buscar(cols, ['descripcion', 'descrip'])
-        col_cajas = buscar(cols, ['cajas'])
-        col_disp = buscar(cols, ['disponible', 'existencia'])
+        if len(df.columns) >= 12:
+            # D=3, E=4, J=9, K=10, L=11
+            col_D = df.columns[3]  # CODIGO
+            col_E = df.columns[4]  # EAN
+            col_J = df.columns[9]  # DESCRIPCION
+            col_K = df.columns[10] # CAJAS
+            col_L = df.columns[11] # UNIDADES
 
-        if col_cod is None or col_desc is None:
-            st.error("⚠️ Este archivo NO es el inventario bueno. No trae CODIGO / DESCRIPCION.")
-        else:
-            if col_ean is None:
-                col_ean = col_cod
-            if col_cajas is None:
-                df['CAJAS_X'] = 0
-                col_cajas = 'CAJAS_X'
-            if col_disp is None:
-                df['DISP_X'] = 0
-                col_disp = 'DISP_X'
+            df_t = pd.DataFrame()
+            df_t['CODIGO'] = df[col_D].astype(str).apply(limpiar)
+            df_t['EAN'] = df[col_E].astype(str).apply(limpiar)
+            df_t['DESCRIPCION'] = df[col_J].astype(str).str.strip()
+            df_t['CAJAS'] = pd.to_numeric(df[col_K], errors='coerce').fillna(0)
+            df_t['UNIDADES'] = pd.to_numeric(df[col_L], errors='coerce').fillna(0)
 
-            df[col_cajas] = pd.to_numeric(df[col_cajas], errors='coerce').fillna(0)
-            df[col_disp] = pd.to_numeric(df[col_disp], errors='coerce').fillna(0)
-            df = df[df[col_cod].notna()]
+            # Quitamos filas sin codigo
+            df_t = df_t[(df_t['CODIGO'] != "") & (df_t['CODIGO'] != "nan") & (df_t['CODIGO'] != "None")]
+            # Quitamos filas donde descripcion es "nan"
+            df_t = df_t[df_t['DESCRIPCION'] != "nan"]
 
-            bus = st.text_input("🔍 Buscar por código o nombre", key="bus1")
+            bus = st.text_input("🔍 Buscar por código, EAN o nombre", key="bus1")
             if bus:
                 t = bus.lower().strip()
-                df_f = df[
-                    df[col_cod].astype(str).str.lower().str.contains(t, na=False) |
-                    df[col_desc].astype(str).str.lower().str.contains(t, na=False) |
-                    df[col_ean].astype(str).str.lower().str.contains(t, na=False)
+                df_f = df_t[
+                    df_t['CODIGO'].str.lower().str.contains(t, na=False) |
+                    df_t['EAN'].str.lower().str.contains(t, na=False) |
+                    df_t['DESCRIPCION'].str.lower().str.contains(t, na=False)
                 ]
             else:
-                df_f = df.copy()
+                df_f = df_t.copy()
 
+            # TOTAL DE LA COLUMNA L = UNIDADES
             c1, c2 = st.columns(2)
-            c1.metric("TOTAL UNIDADES DISPONIBLES", f"{int(df[col_disp].sum()):,}")
-            c2.metric("TOTAL CAJAS", f"{int(df[col_cajas].sum()):,}")
+            c1.metric("TOTAL UNIDADES (L)", f"{int(df_t['UNIDADES'].sum()):,}")
+            c2.metric("TOTAL CAJAS (K)", f"{int(df_t['CAJAS'].sum()):,}")
+
             st.divider()
             st.write(f"**{len(df_f)} productos**")
 
             out = pd.DataFrame()
-            out['CODIGO'] = df_f[col_cod].astype(str)
-            out['EAN'] = df_f[col_ean].astype(str)
-            out['DESCRIPCION'] = df_f[col_desc].astype(str)
-            out['CAJAS'] = df_f[col_cajas].astype(int)
-            out['UNIDADES DISPONIBLES'] = df_f[col_disp].astype(int)
+            out['CODIGO'] = df_f['CODIGO']
+            out['EAN'] = df_f['EAN']
+            out['DESCRIPCION'] = df_f['DESCRIPCION']
+            out['CAJAS'] = df_f['CAJAS'].astype(int)
+            out['UNIDADES'] = df_f['UNIDADES'].astype(int)
 
             st.dataframe(
                 out,
@@ -116,15 +115,17 @@ with tab1:
                 hide_index=True,
                 height=600,
                 column_config={
-                    "CODIGO": st.column_config.TextColumn("CODIGO", width="small"),
-                    "EAN": st.column_config.TextColumn("EAN", width="medium"),
-                    "DESCRIPCION": st.column_config.TextColumn("DESCRIPCION", width="large"),
-                    "CAJAS": st.column_config.NumberColumn("CAJAS", width="small", format="%d"),
-                    "UNIDADES DISPONIBLES": st.column_config.NumberColumn("UNIDADES DISPONIBLES", width="medium", format="%d"),
+                    "CODIGO": st.column_config.TextColumn("CODIGO (D)", width="small"),
+                    "EAN": st.column_config.TextColumn("EAN (E)", width="medium"),
+                    "DESCRIPCION": st.column_config.TextColumn("DESCRIPCION (J)", width="large"),
+                    "CAJAS": st.column_config.NumberColumn("CAJAS (K)", width="small", format="%d"),
+                    "UNIDADES": st.column_config.NumberColumn("UNIDADES (L)", width="medium", format="%d"),
                 }
             )
+        else:
+            st.error("⚠️ Tu inventario.xlsx no trae hasta la columna L.")
 
-# ================= PESTAÑA 2 =================
+# ================= PESTAÑA 2 - IGUAL QUE EL DE LAS 2:02, NO SE TOCA =================
 with tab2:
     st.write("Existencias en tiendas")
     archivo2 = st.file_uploader("Cargar existencias_tiendas.xlsx", type=["xlsx", "xls", "csv"], key="inv2")
@@ -171,21 +172,18 @@ with tab2:
         col_barra = buscar(cols2, ['barra', 'ean'])
         col_ex = buscar(cols2, ['existencia'])
         col_prec = buscar(cols2, ['precio'])
-        # AHORA SI: la DESCRIPCION viene en el mismo archivo de tiendas, columna E
         col_desc_tiendas = buscar(cols2, ['descripcion', 'descrip'])
 
         limpio = pd.DataFrame()
         limpio['ARTICULO'] = df2[col_art].astype(str).apply(limpiar) if col_art else ""
         limpio['BARRA'] = df2[col_barra].astype(str).apply(limpiar) if col_barra else ""
 
-        # 1) PRIMERO usar la DESCRIPCION que ya viene en tiendas (la completa)
         if col_desc_tiendas:
             limpio['DESCRIPCION'] = df2[col_desc_tiendas].astype(str).str.strip()
             limpio['DESCRIPCION'] = limpio['DESCRIPCION'].replace({"nan": "", "None": ""})
         else:
             limpio['DESCRIPCION'] = ""
 
-        # 2) Solo si en tiendas viene en blanco, buscar en inventario como respaldo
         en_blanco_antes = (limpio['DESCRIPCION'] == "").sum()
         if en_blanco_antes > 0 and os.path.exists("inventario.xlsx"):
             try:
